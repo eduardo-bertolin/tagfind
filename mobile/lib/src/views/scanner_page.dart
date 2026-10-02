@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../models/ble_advertisement.dart';
 import '../providers/providers.dart';
 import '../services/ble_service.dart';
+import 'tag_detail_page.dart';
 
 /// Second tab: BLE scanner with live feed of detected TagFind devices.
 class ScannerPage extends ConsumerWidget {
@@ -217,9 +218,19 @@ class _SightingTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TagDetailPage(tagId: adv.hexId),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
           children: [
             // Tag ID
             Container(
@@ -273,12 +284,13 @@ class _SightingTile extends StatelessWidget {
             ),
 
             // GPS sent indicator
-            const Icon(Icons.gps_fixed_rounded,
-                color: AppColors.success, size: 18),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppColors.textMuted, size: 22),
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

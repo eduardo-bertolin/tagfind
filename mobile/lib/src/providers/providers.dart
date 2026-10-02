@@ -103,6 +103,7 @@ class BleScanNotifier extends StateNotifier<bool> {
             latitude: position.latitude,
             longitude: position.longitude,
           );
+          _ref.read(tagsProvider.notifier).refresh();
         }
       } catch (e) {
         // Ignored in desktop / mock test mode
