@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../models/ble_advertisement.dart';
 import '../providers/providers.dart';
 import '../services/ble_service.dart';
+import '../services/distance_estimator.dart';
 import 'tag_detail_page.dart';
 
 /// Second tab: BLE scanner with live feed of detected TagFind devices.
@@ -217,6 +218,9 @@ class _SightingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final distance = adv.distanceMeters;
+    final trend = DistanceEstimator.instance.trend(adv.hexId);
+
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -228,6 +232,7 @@ class _SightingTile extends StatelessWidget {
             ),
           );
         },
+        onLongPress: () => _calibrate(context),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -267,10 +272,21 @@ class _SightingTile extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       _InfoChip(
-                        icon: Icons.signal_cellular_alt_rounded,
-                        label: '${adv.rssi} dBm',
-                        color: AppColors.textMuted,
+                        icon: Icons.near_me_rounded,
+                        label: _formatDistance(distance),
+                        color: _distanceColor(distance),
                       ),
+                      if (trend != 0) ...[
+                        const SizedBox(width: 8),
+                        _InfoChip(
+                          icon: trend == 1
+                              ? Icons.trending_up_rounded
+                              : Icons.trending_down_rounded,
+                          label: trend == 1 ? 'Mais perto' : 'Mais longe',
+                          color:
+                              trend == 1 ? AppColors.success : AppColors.danger,
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -291,6 +307,39 @@ class _SightingTile extends StatelessWidget {
       ),
     ),
   );
+  }
+
+  /// Distância formatada para exibição (precisão honesta: 1 decimal < 10 m).
+  String _formatDistance(double? distance) {
+    if (distance == null) return '— m';
+    if (distance >= 10) return '≈ ${distance.round()} m';
+    return '≈ ${distance.toStringAsFixed(1)} m';
+  }
+
+  /// Cor por proximidade: verde = muito perto, âmbar = perto, cinza = longe.
+  Color _distanceColor(double? distance) {
+    if (distance == null) return AppColors.textMuted;
+    if (distance < 1.5) return AppColors.success;
+    if (distance < 6) return AppColors.amber;
+    return AppColors.textMuted;
+  }
+
+  /// Calibrar a distância de referência assumindo que o usuário está a
+  /// ~1 m da tag neste momento.
+  Future<void> _calibrate(BuildContext context) async {
+    await DistanceEstimator.instance.calibrate(
+      adv.hexId,
+      rssi: adv.rssi,
+      realDistanceMeters: 1.0,
+    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✓ Calibrado: assumindo 1 m da tag agora.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 }
 

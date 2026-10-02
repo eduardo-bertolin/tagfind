@@ -18,6 +18,10 @@ class BleAdvertisement {
   /// RSSI of the received packet (dBm).
   final int rssi;
 
+  /// Distância estimada em metros (RSSI suavizado → path-loss).
+  /// `null` quando ainda não calculada.
+  final double? distanceMeters;
+
   const BleAdvertisement({
     required this.hexId,
     required this.deviceId,
@@ -25,7 +29,26 @@ class BleAdvertisement {
     required this.battery,
     required this.energyMode,
     this.rssi = 0,
+    this.distanceMeters,
   });
+
+  BleAdvertisement copyWith({
+    int? status,
+    int? battery,
+    int? energyMode,
+    int? rssi,
+    double? distanceMeters,
+  }) {
+    return BleAdvertisement(
+      hexId: hexId,
+      deviceId: deviceId,
+      status: status ?? this.status,
+      battery: battery ?? this.battery,
+      energyMode: energyMode ?? this.energyMode,
+      rssi: rssi ?? this.rssi,
+      distanceMeters: distanceMeters ?? this.distanceMeters,
+    );
+  }
 
   bool get isLowBattery => (status & 0x02) != 0;
 
