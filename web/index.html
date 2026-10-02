@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TagFind — Resgate</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="card">
+      <p class="eyebrow">TagFind</p>
+      <h1 id="title">Resgate universal</h1>
+      <p id="subtitle">Aproxime o NFC ou abra o QR para identificar o objeto.</p>
+
+      <dl class="meta">
+        <div>
+          <dt>ID</dt>
+          <dd id="tag-id">—</dd>
+        </div>
+        <div>
+          <dt>Estado</dt>
+          <dd id="tag-status">aguardando</dd>
+        </div>
+      </dl>
+
+      <p id="owner-note" class="note hidden"></p>
+      <p id="error" class="error hidden"></p>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
