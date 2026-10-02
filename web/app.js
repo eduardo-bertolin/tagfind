@@ -13,6 +13,8 @@ const el = {
   error: document.getElementById("error"),
 };
 
+const wsBtn = document.getElementById("whatsapp-btn");
+
 function normalizeId(value) {
   if (!value) return null;
   const hex = value.replace(/^0x/i, "").toUpperCase().padStart(4, "0");
@@ -34,10 +36,14 @@ async function loadTag(tagId) {
     el.status.textContent = "demo local";
     if (tagId === "0x0002") {
       el.title.textContent = "Objeto perdido";
-      el.status.textContent = "PERDIDO";
+      el.status.textContent = "perdido";
       el.note.textContent =
-        "Perdi minha mochila na FAG! Me chame no WhatsApp. Contato: 45999999999";
+        "Perdi minha mochila na FAG! Me chame no WhatsApp.";
       el.note.classList.remove("hidden");
+      if (wsBtn) {
+        wsBtn.href = "https://wa.me/5545999999999";
+        wsBtn.classList.remove("hidden");
+      }
     } else {
       el.title.textContent = "Tag ativa";
       el.status.textContent = "NORMAL";
@@ -48,7 +54,7 @@ async function loadTag(tagId) {
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const { data, error } = await client
     .from("tags")
-    .select("id, status, mensagem, telefone, latitude, longitude")
+    .select("*")
     .eq("id", tagId)
     .maybeSingle();
 
@@ -65,25 +71,35 @@ async function loadTag(tagId) {
   }
 
   el.tagId.textContent = data.id;
-  el.status.textContent = data.status;
 
-  if (data.status === "PERDIDO") {
-    el.title.textContent = "Objeto perdido";
+  const isLost = Boolean(data.is_lost || data.status === "PERDIDO");
+
+  if (isLost) {
+    el.title.textContent = data.label || "Objeto perdido";
+    el.status.textContent = "perdido";
     el.subtitle.textContent = "Alguém marcou este item como desaparecido.";
-    const parts = [];
-    if (data.mensagem) {
-      parts.push(data.mensagem);
-    }
-    if (data.telefone) {
-      parts.push("Contato: " + data.telefone);
-    }
-    if (parts.length) {
-      el.note.textContent = parts.join(" ");
+
+    const message = data.public_message || data.mensagem;
+    if (message) {
+      el.note.textContent = message;
       el.note.classList.remove("hidden");
     }
+
+    if (data.telefone && wsBtn) {
+      const cleanPhone = data.telefone.replace(/\D/g, "");
+      const fullPhone = cleanPhone.length > 11 && cleanPhone.startsWith("55")
+        ? cleanPhone
+        : `55${cleanPhone}`;
+      wsBtn.href = `https://wa.me/${fullPhone}`;
+      wsBtn.classList.remove("hidden");
+    }
   } else {
-    el.title.textContent = "Tag ativa";
+    el.title.textContent = data.label || "Tag ativa";
+    el.status.textContent = (data.status || "NORMAL").toLowerCase();
     el.subtitle.textContent = "Nenhum alerta de perda para este ID.";
+    if (wsBtn) {
+      wsBtn.classList.add("hidden");
+    }
   }
 }
 
