@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:win_ble/win_ble.dart';
+import 'package:win_ble/win_file.dart';
 
 import 'src/config/constants.dart';
 import 'src/config/theme.dart';
@@ -13,6 +17,14 @@ void main() async {
     url: AppConstants.supabaseUrl,
     publishableKey: AppConstants.supabaseAnonKey,
   );
+
+  if (Platform.isWindows) {
+    try {
+      await WinBle.initialize(serverPath: await WinServer.path());
+    } catch (e) {
+      debugPrint('[WinBle] Initialization warning: $e');
+    }
+  }
 
   runApp(const ProviderScope(child: TagFindApp()));
 }

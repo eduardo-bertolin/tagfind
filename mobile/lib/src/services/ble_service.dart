@@ -1,15 +1,18 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:win_ble/win_ble.dart';
 
 import '../config/constants.dart';
 import '../models/ble_advertisement.dart';
 
 /// BLE scan service — connectionless observer for TagFind ESP32 advertising.
 ///
-/// The ESP32 transmits:
-///   [CompanyID_lo][CompanyID_hi] + [6-byte payload]
+/// Supports:
+/// - Windows: Native WinBle via WinRT BLE
+/// - Android / iOS: flutter_blue_plus
 ///
 /// Payload layout (6 bytes):
 ///   [0] Device ID low byte
@@ -28,6 +31,7 @@ class BleService {
   Stream<BleAdvertisement> get advertisements => _controller.stream;
 
   StreamSubscription<List<ScanResult>>? _scanSub;
+  StreamSubscription<BleDevice>? _winScanSub;
   bool _isScanning = false;
 
   bool get isScanning => _isScanning;
@@ -39,6 +43,26 @@ class BleService {
     if (_isScanning) return;
     _isScanning = true;
 
+    // ── Windows Desktop Native BLE ─────────────────────────────────────────
+    if (Platform.isWindows) {
+      try {
+        WinBle.startScanning();
+        _winScanSub = WinBle.scanStream.listen(
+          (device) {
+            final adv = _parseWinBleDevice(device);
+            if (adv != null) {
+              _controller.add(adv);
+            }
+          },
+          onError: (e) => debugPrint('[WinBle] Scan error: $e'),
+        );
+      } catch (e) {
+        debugPrint('[WinBle] Start scanning error: $e');
+      }
+      return;
+    }
+
+    // ── Android / iOS Native BLE ───────────────────────────────────────────
     try {
       // Make sure adapter is on.
       final state = await FlutterBluePlus.adapterState.first;
@@ -65,7 +89,7 @@ class BleService {
         onError: (e) => _controller.addError(e),
       );
     } catch (e) {
-      debugPrint('[BleService] Scan nativo indisponível ($e). Operando em modo simulado.');
+      debugPrint('[BleService] Scan nativo indisponível ($e).');
     }
   }
 
@@ -73,6 +97,16 @@ class BleService {
   Future<void> stopScan() async {
     if (!_isScanning) return;
     _isScanning = false;
+
+    if (Platform.isWindows) {
+      try {
+        WinBle.stopScanning();
+      } catch (_) {}
+      await _winScanSub?.cancel();
+      _winScanSub = null;
+      return;
+    }
+
     try {
       await FlutterBluePlus.stopScan();
     } catch (_) {}
@@ -83,6 +117,7 @@ class BleService {
   /// Release resources.
   void dispose() {
     stopScan();
+    _winScanSub?.cancel();
     _controller.close();
   }
 
@@ -109,7 +144,40 @@ class BleService {
 
   // ── Packet parsing ──────────────────────────────────────────────────────
 
-  /// Attempt to extract a TagFind advertisement from a generic scan result.
+  /// Windows BleDevice parser.
+  BleAdvertisement? _parseWinBleDevice(BleDevice device) {
+    final rssi = int.tryParse(device.rssi) ?? -70;
+
+    // 1. ESP32 / Android manufacturer data format
+    final msd = device.manufacturerData;
+    if (msd.length >= 8) {
+      final companyId = msd[0] | (msd[1] << 8);
+      if (companyId == AppConstants.bleCompanyId) {
+        final payload = Uint8List.fromList(msd.sublist(2, 8));
+        final adv = _decodePayload(payload, rssi);
+        if (adv != null) return adv;
+      }
+    }
+
+    // 2. iOS Service UUID fallback (e.g. iPhone nRF Connect advertising service '0002')
+    for (final uuid in device.serviceUuids) {
+      final str = uuid.toString().toLowerCase();
+      if (str == '0002' || str.contains('00000002-') || str.endsWith('0002')) {
+        return BleAdvertisement(
+          hexId: '0x0002',
+          deviceId: 2,
+          status: 0,
+          battery: 95,
+          energyMode: 0,
+          rssi: rssi,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /// Attempt to extract a TagFind advertisement from a generic scan result (Android/iOS).
   BleAdvertisement? _parseResult(ScanResult result) {
     // 1. ESP32 / Android Manufacturer Data format
     final msd = result.advertisementData.manufacturerData;
