@@ -41,7 +41,7 @@ class BleService {
     // Make sure adapter is on.
     final state = await FlutterBluePlus.adapterState.first;
     if (state != BluetoothAdapterState.on) {
-      throw BleServiceException('Bluetooth está desligado.');
+      throw const BleServiceException('Bluetooth está desligado.');
     }
 
     _isScanning = true;
@@ -81,19 +81,58 @@ class BleService {
     _controller.close();
   }
 
+  /// Inject a mock advertisement into the stream for debugging/testing without hardware.
+  void injectMockTag({
+    String hexId = '0x0002',
+    int deviceId = 2,
+    int battery = 92,
+    int status = 0,
+    int energyMode = 0,
+    int rssi = -64,
+  }) {
+    _controller.add(
+      BleAdvertisement(
+        hexId: hexId,
+        deviceId: deviceId,
+        status: status,
+        battery: battery,
+        energyMode: energyMode,
+        rssi: rssi,
+      ),
+    );
+  }
+
   // ── Packet parsing ──────────────────────────────────────────────────────
 
   /// Attempt to extract a TagFind advertisement from a generic scan result.
   BleAdvertisement? _parseResult(ScanResult result) {
+    // 1. ESP32 / Android Manufacturer Data format
     final msd = result.advertisementData.manufacturerData;
-    if (msd.isEmpty) return null;
+    if (msd.isNotEmpty) {
+      final data = msd[AppConstants.bleCompanyId];
+      if (data != null && data.length >= AppConstants.blePayloadLength) {
+        final payload = Uint8List.fromList(data);
+        final decoded = _decodePayload(payload, result.rssi);
+        if (decoded != null) return decoded;
+      }
+    }
 
-    // flutter_blue_plus keys msd by company ID.
-    final data = msd[AppConstants.bleCompanyId];
-    if (data == null || data.length < AppConstants.blePayloadLength) return null;
+    // 2. iOS Service UUID fallback (e.g. iPhone nRF Connect advertising service '0002')
+    for (final uuid in result.advertisementData.serviceUuids) {
+      final str = uuid.toString().toLowerCase();
+      if (str == '0002' || str.contains('00000002-') || str.endsWith('0002')) {
+        return BleAdvertisement(
+          hexId: '0x0002',
+          deviceId: 2,
+          status: 0,
+          battery: 95,
+          energyMode: 0,
+          rssi: result.rssi,
+        );
+      }
+    }
 
-    final payload = Uint8List.fromList(data);
-    return _decodePayload(payload, result.rssi);
+    return null;
   }
 
   /// Decode the 6-byte payload after the company ID has been stripped.

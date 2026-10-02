@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/theme.dart';
 import '../models/ble_advertisement.dart';
 import '../providers/providers.dart';
+import '../services/ble_service.dart';
 
 /// Second tab: BLE scanner with live feed of detected TagFind devices.
 class ScannerPage extends ConsumerWidget {
@@ -18,6 +20,20 @@ class ScannerPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Scanner BLE'),
         actions: [
+          if (kDebugMode)
+            IconButton(
+              icon: const Icon(Icons.bolt_rounded, color: AppColors.amber),
+              tooltip: 'Simular Tag (Debug)',
+              onPressed: () {
+                BleService.instance.injectMockTag();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Tag 0x0002 simulada com sucesso!'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+            ),
           if (sightings.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
@@ -69,7 +85,7 @@ class ScannerPage extends ConsumerWidget {
           if (isScanning) {
             notifier.stop();
           } else {
-            notifier.start(ref);
+            notifier.start();
           }
         },
         icon: Icon(isScanning ? Icons.stop_rounded : Icons.play_arrow_rounded),

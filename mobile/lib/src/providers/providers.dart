@@ -62,17 +62,18 @@ class TagsNotifier extends AsyncNotifier<List<Tag>> {
 
 /// Whether the BLE scanner is currently active.
 final bleScanningProvider =
-    StateNotifierProvider<BleScanNotifier, bool>((_) => BleScanNotifier());
+    StateNotifierProvider<BleScanNotifier, bool>((ref) => BleScanNotifier(ref));
 
 class BleScanNotifier extends StateNotifier<bool> {
-  BleScanNotifier() : super(false);
+  BleScanNotifier(this._ref) : super(false);
 
+  final Ref _ref;
   StreamSubscription<BleAdvertisement>? _sub;
 
   /// Throttle map: tagId → last update timestamp.
   final Map<String, DateTime> _lastUpdated = {};
 
-  Future<void> start(Ref ref) async {
+  Future<void> start() async {
     if (state) return;
 
     await BleService.instance.startScan();
@@ -90,7 +91,7 @@ class BleScanNotifier extends StateNotifier<bool> {
       _lastUpdated[adv.hexId] = now;
 
       // Append to recent sightings list.
-      ref.read(recentSightingsProvider.notifier).add(adv);
+      _ref.read(recentSightingsProvider.notifier).add(adv);
 
       // Silently push GPS location to Supabase.
       final position = await LocationService.instance.getCurrentPosition();
@@ -133,7 +134,7 @@ class RecentSightingsNotifier extends StateNotifier<List<BleAdvertisement>> {
   static const _maxItems = 50;
 
   void add(BleAdvertisement adv) {
-    state = [adv, ...state.take(_maxItems - 1).toList()];
+    state = [adv, ...state.take(_maxItems - 1)];
   }
 
   void clear() => state = [];
