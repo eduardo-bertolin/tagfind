@@ -1,6 +1,6 @@
 /**
  * BLE observing connectionless (sem GATT).
- * Integre com react-native-ble-plx ou expo-ble no scaffold do app.
+ * Integre com flutter_blue_plus no scaffold do app.
  */
 
 export const COMPANY_ID = 0xffff;

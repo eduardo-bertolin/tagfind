@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- BLE -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>TagFind usa Bluetooth para detectar tags próximas e atualizar sua localização.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>TagFind precisa de Bluetooth para comunicar com dispositivos de rastreamento.</string>
+
+	<!-- Location -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>TagFind usa sua localização para registrar onde uma tag foi detectada.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>TagFind precisa de acesso à localização em segundo plano para rastrear tags perdidas automaticamente.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>TagFind precisa de acesso à localização para registrar avistamentos de tags, mesmo em segundo plano.</string>
+
+	<!-- Background Modes -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+		<string>location</string>
+	</array>
+</dict>
+</plist>
