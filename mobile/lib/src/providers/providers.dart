@@ -76,9 +76,10 @@ class BleScanNotifier extends StateNotifier<bool> {
   Future<void> start() async {
     if (state) return;
 
-    await BleService.instance.startScan();
     state = true;
+    _lastUpdated.clear();
 
+    await _sub?.cancel();
     _sub = BleService.instance.advertisements.listen((adv) async {
       // Throttle: only update once every N seconds per tag.
       final now = DateTime.now();
@@ -94,15 +95,21 @@ class BleScanNotifier extends StateNotifier<bool> {
       _ref.read(recentSightingsProvider.notifier).add(adv);
 
       // Silently push GPS location to Supabase.
-      final position = await LocationService.instance.getCurrentPosition();
-      if (position != null) {
-        await SupabaseService.instance.updateLocation(
-          adv.hexId,
-          latitude: position.latitude,
-          longitude: position.longitude,
-        );
+      try {
+        final position = await LocationService.instance.getCurrentPosition();
+        if (position != null) {
+          await SupabaseService.instance.updateLocation(
+            adv.hexId,
+            latitude: position.latitude,
+            longitude: position.longitude,
+          );
+        }
+      } catch (e) {
+        // Ignored in desktop / mock test mode
       }
     });
+
+    await BleService.instance.startScan();
   }
 
   Future<void> stop() async {

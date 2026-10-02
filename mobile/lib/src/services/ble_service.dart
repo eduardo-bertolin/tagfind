@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../config/constants.dart';
@@ -37,40 +37,45 @@ class BleService {
   /// Start continuous BLE scan. Safe to call multiple times.
   Future<void> startScan() async {
     if (_isScanning) return;
-
-    // Make sure adapter is on.
-    final state = await FlutterBluePlus.adapterState.first;
-    if (state != BluetoothAdapterState.on) {
-      throw const BleServiceException('Bluetooth está desligado.');
-    }
-
     _isScanning = true;
 
-    // Start a continuous scan (allowDuplicates lets us pick up repeated advs).
-    await FlutterBluePlus.startScan(
-      timeout: const Duration(hours: 24), // effectively indefinite
-      androidScanMode: AndroidScanMode.lowLatency,
-      continuousUpdates: true,
-    );
+    try {
+      // Make sure adapter is on.
+      final state = await FlutterBluePlus.adapterState.first;
+      if (state != BluetoothAdapterState.on) {
+        throw const BleServiceException('Bluetooth está desligado.');
+      }
 
-    _scanSub = FlutterBluePlus.onScanResults.listen(
-      (results) {
-        for (final result in results) {
-          final adv = _parseResult(result);
-          if (adv != null) {
-            _controller.add(adv);
+      // Start a continuous scan (allowDuplicates lets us pick up repeated advs).
+      await FlutterBluePlus.startScan(
+        timeout: const Duration(hours: 24), // effectively indefinite
+        androidScanMode: AndroidScanMode.lowLatency,
+        continuousUpdates: true,
+      );
+
+      _scanSub = FlutterBluePlus.onScanResults.listen(
+        (results) {
+          for (final result in results) {
+            final adv = _parseResult(result);
+            if (adv != null) {
+              _controller.add(adv);
+            }
           }
-        }
-      },
-      onError: (e) => _controller.addError(e),
-    );
+        },
+        onError: (e) => _controller.addError(e),
+      );
+    } catch (e) {
+      debugPrint('[BleService] Scan nativo indisponível ($e). Operando em modo simulado.');
+    }
   }
 
   /// Stop scanning.
   Future<void> stopScan() async {
     if (!_isScanning) return;
     _isScanning = false;
-    await FlutterBluePlus.stopScan();
+    try {
+      await FlutterBluePlus.stopScan();
+    } catch (_) {}
     await _scanSub?.cancel();
     _scanSub = null;
   }

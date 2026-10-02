@@ -24,14 +24,19 @@ class ScannerPage extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.bolt_rounded, color: AppColors.amber),
               tooltip: 'Simular Tag (Debug)',
-              onPressed: () {
+              onPressed: () async {
+                if (!isScanning) {
+                  await ref.read(bleScanningProvider.notifier).start();
+                }
                 BleService.instance.injectMockTag();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Tag 0x0002 simulada com sucesso!'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('⚡ Tag 0x0002 detectada!'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                }
               },
             ),
           if (sightings.isNotEmpty)
