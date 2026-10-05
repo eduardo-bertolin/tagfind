@@ -14,13 +14,13 @@ import '../models/ble_advertisement.dart';
 /// - Windows: Native WinBle via WinRT BLE
 /// - Android / iOS: flutter_blue_plus
 ///
-/// Payload layout (6 bytes):
-///   [0] Device ID low byte
-///   [1] Device ID high byte
-///   [2] Status flags (bit0 = lost, bit1 = low_batt)
-///   [3] Battery %
-///   [4] Energy mode (0x00 Normal, 0x01 ECO, 0x02 SOS)
-///   [5] CRC-8 of bytes 0..4
+/// Payload layout (6 bytes after the 2-byte Company ID):
+///   [0] Status         : 0x01 Normal | 0x02 Button pressed | 0xFF Hard-reset
+///   [1] Battery %      : 0x00–0x64 (0–100)
+///   [2] Buzzer counter : cumulative beep count
+///   [3] Energy mode    : 0x01 Moving | 0x02 Idle | 0x03 Lost
+///   [4] Device ID low byte
+///   [5] Device ID high byte
 class BleService {
   BleService._();
   static final BleService instance = BleService._();
@@ -70,7 +70,7 @@ class BleService {
         throw const BleServiceException('Bluetooth está desligado.');
       }
 
-      // Start a continuous scan (allowDuplicates lets us pick up repeated advs).
+      // Start a continuous scan (continuousUpdates lets us pick up repeated advs).
       await FlutterBluePlus.startScan(
         timeout: const Duration(hours: 24), // effectively indefinite
         androidScanMode: AndroidScanMode.lowLatency,
@@ -125,9 +125,10 @@ class BleService {
   void injectMockTag({
     String hexId = '0x0002',
     int deviceId = 2,
+    int status = 0x01,
     int battery = 92,
-    int status = 0,
-    int energyMode = 0,
+    int buzzerCount = 3,
+    int energyMode = 0x01,
     int rssi = -64,
   }) {
     _controller.add(
@@ -136,8 +137,24 @@ class BleService {
         deviceId: deviceId,
         status: status,
         battery: battery,
+        buzzerCount: buzzerCount,
         energyMode: energyMode,
         rssi: rssi,
+      ),
+    );
+  }
+
+  /// Inject a mock security alert (0xFF) for testing the violation detection.
+  void injectSecurityAlert({String hexId = '0x0002', int deviceId = 2}) {
+    _controller.add(
+      BleAdvertisement(
+        hexId: hexId,
+        deviceId: deviceId,
+        status: 0xFF,
+        battery: 80,
+        buzzerCount: 0,
+        energyMode: 0x01,
+        rssi: -60,
       ),
     );
   }
@@ -148,7 +165,7 @@ class BleService {
   BleAdvertisement? _parseWinBleDevice(BleDevice device) {
     final rssi = int.tryParse(device.rssi) ?? -70;
 
-    // 1. ESP32 / Android manufacturer data format
+    // 1. ESP32 Manufacturer Data format (Company ID = 2 bytes, then 6-byte payload)
     final msd = device.manufacturerData;
     if (msd.length >= 8) {
       final companyId = msd[0] | (msd[1] << 8);
@@ -159,16 +176,17 @@ class BleService {
       }
     }
 
-    // 2. iOS Service UUID fallback (e.g. iPhone nRF Connect advertising service '0002')
+    // 2. iOS Service UUID fallback
     for (final uuid in device.serviceUuids) {
       final str = uuid.toString().toLowerCase();
       if (str == '0002' || str.contains('00000002-') || str.endsWith('0002')) {
         return BleAdvertisement(
           hexId: '0x0002',
           deviceId: 2,
-          status: 0,
+          status: 0x01,
           battery: 95,
-          energyMode: 0,
+          buzzerCount: 0,
+          energyMode: 0x01,
           rssi: rssi,
         );
       }
@@ -190,16 +208,17 @@ class BleService {
       }
     }
 
-    // 2. iOS Service UUID fallback (e.g. iPhone nRF Connect advertising service '0002')
+    // 2. iOS Service UUID fallback
     for (final uuid in result.advertisementData.serviceUuids) {
       final str = uuid.toString().toLowerCase();
       if (str == '0002' || str.contains('00000002-') || str.endsWith('0002')) {
         return BleAdvertisement(
           hexId: '0x0002',
           deviceId: 2,
-          status: 0,
+          status: 0x01,
           battery: 95,
-          energyMode: 0,
+          buzzerCount: 0,
+          energyMode: 0x01,
           rssi: result.rssi,
         );
       }
@@ -208,30 +227,39 @@ class BleService {
     return null;
   }
 
-  /// Decode the 6-byte payload after the company ID has been stripped.
+  /// Decode the 6-byte payload after the Company ID has been stripped.
+  ///
+  /// Byte mapping per spec:
+  ///   [0] Status / Button
+  ///   [1] Battery %
+  ///   [2] Buzzer counter
+  ///   [3] Energy mode
+  ///   [4] Device ID low byte
+  ///   [5] Device ID high byte
   BleAdvertisement? _decodePayload(Uint8List payload, int rssi) {
     if (payload.length < AppConstants.blePayloadLength) return null;
 
-    // CRC-8 verification
-    final expectedCrc = _crc8(payload.sublist(0, 5));
-    if (expectedCrc != payload[5]) return null;
-
-    final deviceId = payload[0] | (payload[1] << 8);
+    final statusByte  = payload[0]; // 0x01 | 0x02 | 0xFF
+    final battery     = payload[1]; // 0–100
+    final buzzerCount = payload[2]; // cumulative
+    final energyMode  = payload[3]; // 0x01 | 0x02 | 0x03
+    final deviceId    = payload[4] | (payload[5] << 8);
     final hexId =
         '0x${deviceId.toRadixString(16).padLeft(4, '0').toUpperCase()}';
 
     return BleAdvertisement(
       hexId: hexId,
       deviceId: deviceId,
-      status: payload[2],
-      battery: payload[3],
-      energyMode: payload[4],
+      status: statusByte,
+      battery: battery,
+      buzzerCount: buzzerCount,
+      energyMode: energyMode,
       rssi: rssi,
     );
   }
 
   /// CRC-8 matching the ESP32 firmware (`crc8` in main.cpp).
-  static int _crc8(Uint8List data) {
+  static int crc8(Uint8List data) {
     int crc = 0x00;
     for (final byte in data) {
       crc ^= byte;

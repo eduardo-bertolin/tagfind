@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/constants.dart';
 import '../models/ble_advertisement.dart';
@@ -50,10 +51,50 @@ class TagsNotifier extends AsyncNotifier<List<Tag>> {
     await refresh();
   }
 
-  /// Register a new tag.
-  Future<void> register(String tagId) async {
-    await SupabaseService.instance.registerTag(tagId);
+  /// Update the display name and emoji.
+  Future<void> updateNomeEmoji(
+    String tagId, {
+    required String nome,
+    required String emoji,
+  }) async {
+    await SupabaseService.instance.updateNomeEmoji(
+      tagId,
+      nome: nome,
+      emoji: emoji,
+    );
     await refresh();
+  }
+
+  /// Register a new tag (from BLE scan flow).
+  Future<void> register(String tagId, {String nome = '', String emoji = '📦'}) async {
+    await SupabaseService.instance.registerTag(tagId, nome: nome, emoji: emoji);
+    await refresh();
+  }
+
+  /// Securely unbind a tag:
+  ///   1. Removes the OWNER_SECRET_KEY from local SharedPreferences.
+  ///   2. Deletes the tag row from Supabase.
+  ///   3. Refreshes the tag list.
+  Future<void> unbindTag(String tagId) async {
+    // Clear the local secret key.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('owner_key_$tagId');
+
+    // Remove from Supabase.
+    await SupabaseService.instance.unbindTag(tagId);
+    await refresh();
+  }
+
+  /// Persist the OWNER_SECRET_KEY locally (received from server during first bind).
+  Future<void> saveOwnerKey(String tagId, String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('owner_key_$tagId', key);
+  }
+
+  /// Retrieve the locally stored OWNER_SECRET_KEY for a given tag.
+  Future<String?> getOwnerKey(String tagId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('owner_key_$tagId');
   }
 }
 
@@ -74,6 +115,9 @@ class BleScanNotifier extends StateNotifier<bool> {
   /// Throttle map: tagId → last GPS/Supabase push timestamp.
   final Map<String, DateTime> _lastGpsPush = {};
 
+  /// De-dup map for 0xFF alerts: tagId → last alert timestamp.
+  final Map<String, DateTime> _lastAlertTime = {};
+
   Future<void> start() async {
     if (state) return;
 
@@ -83,17 +127,22 @@ class BleScanNotifier extends StateNotifier<bool> {
 
     await _sub?.cancel();
     _sub = BleService.instance.advertisements.listen((adv) async {
-      // 1) Distância: cálculo local em cada pacote (suavizado via EWMA).
+      // ── Security alert: status 0xFF (hard-reset attempt) ────────────────
+      if (adv.isSecurityAlert) {
+        _handleSecurityAlert(adv);
+        return; // do not process further
+      }
+
+      // 1) Distance: local EWMA calculation per packet.
       final distance =
           await DistanceEstimator.instance.feed(adv.hexId, adv.rssi);
 
-      // 2) Lista de sightings: upsert (mantém a posição estável na lista).
+      // 2) Sightings list: upsert (keeps stable position in list).
       _ref
           .read(recentSightingsProvider.notifier)
           .upsert(adv.copyWith(distanceMeters: distance));
 
-      // 3) GPS/Supabase: throttle (custo de bateria/rede). A exibição da
-      //    distância não depende disto — ela é 100% local.
+      // 3) GPS/Supabase: throttled (battery / network cost).
       final now = DateTime.now();
       final last = _lastGpsPush[adv.hexId];
       if (last == null ||
@@ -128,6 +177,20 @@ class BleScanNotifier extends StateNotifier<bool> {
     state = false;
   }
 
+  /// Handle a security alert (0xFF) received via BLE broadcast.
+  /// Throttled to one alert per 60 s per tag to avoid Supabase spam.
+  void _handleSecurityAlert(BleAdvertisement adv) {
+    final now = DateTime.now();
+    final last = _lastAlertTime[adv.hexId];
+    if (last != null && now.difference(last).inSeconds < 60) return;
+
+    _lastAlertTime[adv.hexId] = now;
+    SupabaseService.instance.insertSecurityAlert(adv.hexId).catchError((_) {});
+
+    // Notify UI via a dedicated provider.
+    _ref.read(securityAlertsProvider.notifier).add(adv.hexId);
+  }
+
   @override
   void dispose() {
     stop();
@@ -153,8 +216,8 @@ class RecentSightingsNotifier extends StateNotifier<List<BleAdvertisement>> {
     state = [adv, ...state.take(_maxItems - 1)];
   }
 
-  /// Substitui a sighting de uma tag já existente (mantendo a posição na
-  /// lista) ou adiciona no topo se for nova.
+  /// Substitutes an existing sighting for the same tag (stable position in
+  /// the list) or adds at the top if new.
   void upsert(BleAdvertisement adv) {
     final index = state.indexWhere((a) => a.hexId == adv.hexId);
     if (index >= 0) {
@@ -164,6 +227,32 @@ class RecentSightingsNotifier extends StateNotifier<List<BleAdvertisement>> {
     } else {
       add(adv);
     }
+  }
+
+  void clear() => state = [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Security Alerts (in-memory list of tag IDs that triggered 0xFF)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// List of tag IDs that have recently sent a 0xFF security alert.
+final securityAlertsProvider =
+    StateNotifierProvider<SecurityAlertsNotifier, List<String>>(
+  (_) => SecurityAlertsNotifier(),
+);
+
+class SecurityAlertsNotifier extends StateNotifier<List<String>> {
+  SecurityAlertsNotifier() : super([]);
+
+  void add(String tagId) {
+    if (!state.contains(tagId)) {
+      state = [...state, tagId];
+    }
+  }
+
+  void dismiss(String tagId) {
+    state = state.where((id) => id != tagId).toList();
   }
 
   void clear() => state = [];

@@ -16,6 +16,12 @@ class AppColors {
   static const Color danger      = Color(0xFFFF6B6B);
   static const Color success     = Color(0xFF4ADE80);
   static const Color whatsapp    = Color(0xFF25D366);
+
+  // Semantic surface roles (M3-aligned)
+  static const Color surfaceContainerLow = Color(0xFF252525);
+  static const Color surfaceContainerHigh = Color(0xFF2D2D2D);
+  static const Color onSurfaceVariant    = Color(0xFFA3A3A3);
+  static const Color onSurfacePrimary    = Color(0xFFF5F5F5);
 }
 
 class AppTheme {
@@ -45,7 +51,7 @@ class AppTheme {
       iconTheme: const IconThemeData(color: AppColors.amber),
     ),
     cardTheme: CardThemeData(
-      color: AppColors.card,
+      color: AppColors.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: AppColors.cardBorder),
@@ -72,8 +78,8 @@ class AppTheme {
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.amber, width: 2),
       ),
-      labelStyle: const TextStyle(color: AppColors.textMuted),
-      hintStyle: const TextStyle(color: AppColors.textMuted),
+      labelStyle: const TextStyle(color: AppColors.onSurfaceVariant),
+      hintStyle: const TextStyle(color: AppColors.onSurfaceVariant),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
