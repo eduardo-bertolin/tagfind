@@ -80,8 +80,14 @@ class ScannerPage extends ConsumerWidget {
                 : ListView.builder(
                     padding: const EdgeInsets.only(bottom: 100),
                     itemCount: sightings.length,
-                    itemBuilder: (_, i) =>
-                        _SightingTile(adv: sightings[i]),
+                    itemBuilder: (_, i) {
+                      final adv = sightings[i];
+                      if (adv == null) {
+                        // Segurança nula: pular entradas nulas (defesa extra).
+                        return const SizedBox.shrink();
+                      }
+                      return _SightingTile(adv: adv);
+                    },
                   ),
           ),
         ],

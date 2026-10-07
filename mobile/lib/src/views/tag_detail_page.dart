@@ -745,8 +745,8 @@ class _LocationCard extends StatelessWidget {
                     color: AppColors.amber, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  '${tag.latitude!.toStringAsFixed(6)}, '
-                  '${tag.longitude!.toStringAsFixed(6)}',
+                  '${tag.latitude?.toStringAsFixed(6) ?? '--'}, '
+                  '${tag.longitude?.toStringAsFixed(6) ?? '--'}',
                   style: const TextStyle(color: AppColors.textMuted),
                 ),
               ],
@@ -760,7 +760,7 @@ class _LocationCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     DateFormat('dd/MM/yyyy HH:mm')
-                        .format(tag.updatedAt!.toLocal()),
+                        .format(tag.updatedAt?.toLocal() ?? DateTime.now()),
                     style: const TextStyle(
                         color: AppColors.textMuted, fontSize: 13),
                   ),
@@ -769,7 +769,9 @@ class _LocationCard extends StatelessWidget {
             ],
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: () => _openMap(tag.latitude!, tag.longitude!),
+              onPressed: tag.latitude != null && tag.longitude != null
+                  ? () => _openMap(tag.latitude!, tag.longitude!)
+                  : null,
               icon: const Icon(Icons.map_outlined),
               label: const Text('Abrir no mapa'),
               style: OutlinedButton.styleFrom(

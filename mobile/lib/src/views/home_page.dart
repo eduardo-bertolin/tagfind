@@ -300,7 +300,17 @@ class _TagListView extends ConsumerWidget {
 
               itemCount: tags.length,
 
-              itemBuilder: (_, i) => _TagCard(tag: tags[i]),
+              itemBuilder: (_, i) {
+
+                final tag = tags[i];
+                if (tag == null) {
+                  // Segurança nula: pular entradas nulas (defesa extra).
+                  return const SizedBox.shrink();
+                }
+
+                return _TagCard(tag: tag);
+
+              },
 
             ),
 
