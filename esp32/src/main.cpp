@@ -7,9 +7,9 @@
 #endif
 
 static const uint16_t COMPANY_ID = 0xFFFF;
-static const uint8_t ENERGY_NORMAL = 0x00;
-static const uint8_t ENERGY_ECO = 0x01;
-static const uint8_t ENERGY_SOS = 0x02;
+static const uint8_t ENERGY_MOVING = 0x01;
+static const uint8_t ENERGY_IDLE = 0x02;
+static const uint8_t ENERGY_LOST = 0x03;
 
 static const uint32_t ADV_DURATION_MS = 200;
 static const uint64_t SLEEP_US = 8ULL * 1000000ULL; // 8 s entre bursts
@@ -42,17 +42,18 @@ void setup() {
   Serial.begin(115200);
   delay(50);
 
+  const uint8_t status = 0x01; // Normal (0x02 Botão, 0xFF Hard Reset)
   const uint8_t battery = readBatteryPercent();
-  const uint8_t status = buildStatus(battery);
-  const uint8_t mode = ENERGY_NORMAL;
+  const uint8_t buzzerCount = 0; // Contador de bipes (placeholder)
+  const uint8_t mode = ENERGY_MOVING; // 0x01 Movimento, 0x02 Repouso, 0x03 Perda
 
   uint8_t payload[6];
-  payload[0] = (uint8_t)(TAG_DEVICE_ID & 0xFF);
-  payload[1] = (uint8_t)((TAG_DEVICE_ID >> 8) & 0xFF);
-  payload[2] = status;
-  payload[3] = battery;
-  payload[4] = mode;
-  payload[5] = crc8(payload, 5);
+  payload[0] = status;              // Byte 0: Status
+  payload[1] = battery;             // Byte 1: Bateria (0-100)
+  payload[2] = buzzerCount;         // Byte 2: Contador de Bipes
+  payload[3] = mode;                // Byte 3: Modo de Energia
+  payload[4] = (uint8_t)(TAG_DEVICE_ID & 0xFF); // Byte 4: Device ID low
+  payload[5] = (uint8_t)((TAG_DEVICE_ID >> 8) & 0xFF); // Byte 5: Device ID high
 
   NimBLEDevice::init("");
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);

@@ -273,6 +273,13 @@ class BleService {
   }
 }
 
+class SecurityException implements Exception {
+  final String message;
+  const SecurityException(this.message);
+  @override
+  String toString() => 'SecurityException: $message';
+}
+
 class BleServiceException implements Exception {
   final String message;
   const BleServiceException(this.message);

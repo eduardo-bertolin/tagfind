@@ -65,23 +65,47 @@ class TagsNotifier extends AsyncNotifier<List<Tag>> {
     await refresh();
   }
 
-  /// Register a new tag (from BLE scan flow).
+  /// Register a new tag (from BLE scan flow) with OWNER_SECRET_KEY generation.
   Future<void> register(String tagId, {String nome = '', String emoji = '📦'}) async {
+    // Geração da chave de segurança do proprietário.
+    final ownerKey = 'tf_${tagId}_${DateTime.now().millisecondsSinceEpoch}_${_randomHex(8)}';
+
     await SupabaseService.instance.registerTag(tagId, nome: nome, emoji: emoji);
+    await saveOwnerKey(tagId, ownerKey);
     await refresh();
   }
 
-  /// Securely unbind a tag:
-  ///   1. Removes the OWNER_SECRET_KEY from local SharedPreferences.
-  ///   2. Deletes the tag row from Supabase.
-  ///   3. Refreshes the tag list.
-  Future<void> unbindTag(String tagId) async {
-    // Clear the local secret key.
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('owner_key_$tagId');
+  static String _randomHex(int len) {
+    final chars = '0123456789abcdef';
+    final random = DateTime.now().millisecondsSinceEpoch;
+    final sb = StringBuffer();
+    var seed = random;
+    for (var i = 0; i < len; i++) {
+      seed = (seed * 31 + i) % chars.length;
+      sb.write(chars[seed]);
+    }
+    return sb.toString();
+  }
 
-    // Remove from Supabase.
+  /// Securely unbind a tag:
+  ///   1. Recovers OWNER_SECRET_KEY locally.
+  ///   2. Validates that the key exists (block if missing).
+  ///   3. Removes from Supabase.
+  ///   4. Only then clears local key.
+  Future<void> unbindTag(String tagId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = prefs.getString('owner_key_$tagId');
+
+    // Proteção: impedir desvinculação sem chave de segurança.
+    if (key == null || key.isEmpty) {
+      throw const SecurityException('OWNER_SECRET_KEY não encontrado. Desvinculação bloqueada.');
+    }
+
+    // Remover do Supabase antes de limpar local (ordem segura).
     await SupabaseService.instance.unbindTag(tagId);
+
+    // Após confirmação do banco, limpar chave local.
+    await prefs.remove('owner_key_$tagId');
     await refresh();
   }
 
